@@ -1,0 +1,82 @@
+version: '3.7'
+
+services:
+  db-core:
+    image: postgres
+    container_name: db-core
+    environment:
+      POSTGRES_USER: $CORE_DB_USER
+      POSTGRES_PASSWORD: $CORE_DB_PASSWORD
+      POSTGRES_DB: $CORE_DB_NAME
+    volumes:
+      - db-core:/data/postgres
+      - ./db-core/migrations:/docker-entrypoint-initdb.d
+    networks:
+      - db-core
+    restart: unless-stopped
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  api-core:
+    container_name: api-core
+    build: 
+      context: ./api-core
+    networks:
+      - db-core
+      - api-core
+    restart: unless-stopped
+    command:
+      [
+      "--connection",
+      "postgresql://$CORE_DB_USER:$CORE_DB_PASSWORD@db-core/$CORE_DB_NAME",
+
+      "--port",
+      "5433",
+
+      "--schema",
+      "public",
+
+      "--host",
+      "0.0.0.0",
+
+      "--append-plugins",
+      "@graphile-contrib/pg-simplify-inflector",
+
+      "--extended-errors",
+      "errcode",
+
+      "--legacy-relations",
+      "omit",
+
+      "--schema",
+      "public",
+
+      "--subscriptions",
+      "--retry-on-init-fail",
+      "--dynamic-json",
+      "--no-setof-functions-contain-nulls",
+      "--no-ignore-rbac",
+      "--disable-graphiql",
+      "--enable-query-batching",
+      "--disable-query-log",
+      ]
+    depends_on:
+      - db-core
+
+  reverse-proxy:
+    container_name: reverse-proxy
+    build: ./reverse-proxy
+    ports:
+      - $PORT:80/tcp
+    restart: unless-stopped
+    networks:
+      - api-core
+
+networks:
+  db-core:
+  api-core:
+
+volumes:
+  db-core:

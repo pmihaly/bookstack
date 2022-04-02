@@ -1,0 +1,107 @@
+version: '3.7'
+
+services:
+  db-core:
+    image: postgres
+    container_name: db-core
+    environment:
+      POSTGRES_USER: $CORE_DB_USER
+      POSTGRES_PASSWORD: $CORE_DB_PASSWORD
+      POSTGRES_DB: $CORE_DB_NAME
+    volumes:
+      - db-core:/data/postgres
+      - ./db-core/migrations:/docker-entrypoint-initdb.d
+    ports:
+      - '5432:5432'
+    networks:
+      - db-core
+    restart: unless-stopped
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  db-core-admin:
+    image: dpage/pgadmin4
+    container_name: db-core-admin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: $CORE_DB_ADMIN_EMAIL
+      PGADMIN_DEFAULT_PASSWORD: $CORE_DB_ADMIN_EMAIL 
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - db-core-admin:/var/lib/pgadmin
+    ports:
+      - '5050:80'
+    networks:
+      - db-core
+    restart: unless-stopped
+    depends_on:
+      - db-core
+
+  api-core:
+    container_name: api-core
+    build: 
+      context: ./api-core
+    networks:
+      - db-core
+      - api-core
+    ports:
+      - '5433:5433'
+    restart: unless-stopped
+    command:
+      [
+      "--connection",
+      "postgresql://$CORE_DB_USER:$CORE_DB_PASSWORD@db-core/$CORE_DB_NAME",
+
+      "--port",
+      "5433",
+
+      "--schema",
+      "public",
+
+      "--host",
+      "0.0.0.0",
+
+      "--extended-errors",
+      "hint,detail,errcode",
+
+      "--append-plugins",
+      "@graphile-contrib/pg-simplify-inflector",
+
+      "--graphiql",
+      "/",
+
+      "--legacy-relations",
+      "omit",
+
+      "--subscriptions",
+      "--watch",
+      "--dynamic-json",
+      "--no-setof-functions-contain-nulls",
+      "--no-ignore-rbac",
+      "--show-error-stack=json",
+      "--enhance-graphiql",
+      "--allow-explain",
+      "--enable-query-batching",
+      ]
+    depends_on:
+      - db-core
+
+  reverse-proxy:
+    container_name: reverse-proxy
+    build: ./reverse-proxy
+    ports:
+      - $PORT:80/tcp
+    restart: unless-stopped
+    networks:
+      - api-core
+
+networks:
+  db-core:
+    driver: bridge
+  api-core:
+    driver: bridge
+
+volumes:
+  db-core:
+  db-core-admin:
